@@ -4,15 +4,18 @@ export default function App() {
   const [practices, setPractices] = useState([]);
   const [payments, setPayments] = useState([]); // Historial de recibos de pagos realizados
   
-  // Estado para controlar qué mes y año estamos viendo en el calendario
+  // Estado para controlar el mes del calendario
   const [viewDate, setViewDate] = useState(new Date());
   
-  // Estados de control para el formulario de entrada
+  // Estados del formulario de entrada
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
-  const [cost, setCost] = useState('32.37'); // Precio predeterminado por clase
+  const [cost, setCost] = useState('32.37');
 
-  // 1. CARGAR DATOS (Persistencia de memoria al abrir la app)
+  // NUEVO: Estado para controlar qué clase se está editando
+  const [editingId, setEditingId] = useState(null);
+
+  // 1. CARGAR DATOS (Persistencia)
   useEffect(() => {
     const savedPractices = JSON.parse(localStorage.getItem('mis_practicas_react')) || [];
     const savedPayments = JSON.parse(localStorage.getItem('mis_pagos_react')) || [];
@@ -20,24 +23,23 @@ export default function App() {
     setPayments(savedPayments);
   }, []);
 
-  // 2. GUARDAR DATOS (Guarda automáticamente ante cualquier cambio)
+  // 2. GUARDAR DATOS (Persistencia automática)
   useEffect(() => {
     localStorage.setItem('mis_practicas_react', JSON.stringify(practices));
     localStorage.setItem('mis_pagos_react', JSON.stringify(payments));
   }, [practices, payments]);
 
-  // Reloj interno del sistema en tiempo real
   const now = new Date();
 
-  // Ordenar las clases por fecha y hora reales para asignar el número de práctica correcto cronológicamente
+  // Ordenar cronológicamente para asignar los números reales en la lista
   const sortedPractices = [...practices].sort((a, b) => {
     return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
   });
 
-  // Evaluar AUTOMÁTICAMENTE el estado de cada clase según la hora actual del dispositivo
+  // Evaluar estados en tiempo real (Realizada o Programada)
   const practicesWithStatus = sortedPractices.map((p, index) => {
     const practiceDateTime = new Date(`${p.date}T${p.time}`);
-    const isCompleted = practiceDateTime <= now; // Si ya pasó la hora, está realizada automáticamente
+    const isCompleted = practiceDateTime <= now;
     return {
       ...p,
       displayNumber: index + 1,
@@ -45,65 +47,101 @@ export default function App() {
     };
   });
 
-  // Evaluar si la próxima práctica a añadir entra en el bono gratis (las 5 primeras de la lista)
   const isIncluded = practices.length < 5;
 
+  // Guardar nueva práctica o actualizar la existente
   const handleAddPractice = () => {
     if (!date || !time) {
       alert("Por favor, selecciona una fecha y una hora para poder guardar.");
       return;
     }
     
-    const newPractice = {
-      id: Date.now().toString(), // ID compatible con servidores locales y despliegues sin HTTPS
-      date,
-      time,
-      isIncluded: isIncluded,
-      cost: isIncluded ? 0 : parseFloat(cost || 32.37),
-      isPaid: isIncluded
-    };
-
-    setPractices([...practices, newPractice]);
+    if (editingId) {
+      // MODO EDICIÓN: Actualizar los datos de la práctica existente
+      const updated = practices.map(p => {
+        if (p.id === editingId) {
+          return {
+            ...p,
+            date,
+            time,
+            cost: p.isIncluded ? 0 : parseFloat(cost || 32.37)
+          };
+        }
+        return p;
+      });
+      setPractices(updated);
+      setEditingId(null);
+    } else {
+      // MODO NUEVA: Añadir una práctica normal a la lista
+      const newPractice = {
+        id: Date.now().toString(),
+        date,
+        time,
+        isIncluded: isIncluded,
+        cost: isIncluded ? 0 : parseFloat(cost || 32.37),
+        isPaid: isIncluded
+      };
+      setPractices([...practices, newPractice]);
+    }
     
-    // Resetear formulario manteniendo el precio estándar listo
+    // Limpiar formulario
     setDate('');
     setTime('');
     setCost('32.37');
   };
 
-  // --- LOGICA INTELIGENTE DE DEUDAS (Solo suma clases pasadas/realizadas que no estén pagadas) ---
+  // NUEVO: Activar modo edición cargando los datos en el formulario
+  const handleEditClick = (p) => {
+    setEditingId(p.id);
+    setDate(p.date);
+    setTime(p.time);
+    setCost(p.isIncluded ? '32.37' : p.cost.toString());
+    // Mover el scroll hacia arriba automáticamente para que el usuario vea el formulario listo
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // NUEVO: Cancelar el modo edición y limpiar
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setDate('');
+    setTime('');
+    setCost('32.37');
+  };
+
+  // NUEVO: Eliminar una práctica específica de la lista
+  const handleDeletePractice = (id, number) => {
+    if (window.confirm(`¿Seguro que quieres eliminar definitivamente la Práctica Nº ${number}?`)) {
+      setPractices(practices.filter(p => p.id !== id));
+      // Si justo estábamos editando la práctica eliminada, cancelamos la edición
+      if (editingId === id) {
+        handleCancelEdit();
+      }
+    }
+  };
+
+  // --- CÁLCULO DE CUENTAS ---
   const payablePractices = practicesWithStatus.filter(p => !p.isPaid && p.isCompleted);
   const totalDebt = payablePractices.reduce((sum, p) => sum + p.cost, 0);
   const gratisRestantes = 5 - practices.length < 0 ? 0 : 5 - practices.length;
 
-  // Registrar el pago del lote acumulado de golpe
+  // Registrar el pago de golpe
   const handlePayBatch = () => {
     if (payablePractices.length === 0) return;
-    
-    const practiceNumbers = payablePractices.map(p => `Nº ${p.displayNumber}`);
-    const textNumbers = practiceNumbers.join(', ');
+    const practiceNumbers = payablePractices.map(p => `Nº ${p.displayNumber}`).join(', ');
 
-    if (window.confirm(`¿Confirmas que vas a pagar las prácticas acumuladas (${textNumbers}) por un total de ${totalDebt.toFixed(2).replace('.', ',')}€?`)) {
-      
-      // Crear el recibo detallado para el historial
+    if (window.confirm(`¿Confirmas el pago de las prácticas acumuladas (${practiceNumbers}) por un total de ${totalDebt.toFixed(2).replace('.', ',')}€?`)) {
       const newReceipt = {
         id: Date.now().toString(),
         dateOfPayment: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
         amount: totalDebt,
-        practicesPaid: textNumbers
+        practicesPaid: practiceNumbers
       };
 
-      // Marcar esas prácticas específicas como pagadas en el estado global
       const payableIds = payablePractices.map(p => p.id);
-      const updatedPractices = practices.map(p => {
-        if (payableIds.includes(p.id)) {
-          return { ...p, isPaid: true };
-        }
-        return p;
-      });
+      const updatedPractices = practices.map(p => payableIds.includes(p.id) ? { ...p, isPaid: true } : p);
 
       setPractices(updatedPractices);
-      setPayments([newReceipt, ...payments]); // El recibo nuevo se coloca arriba del todo
+      setPayments([newReceipt, ...payments]);
     }
   };
 
@@ -111,10 +149,11 @@ export default function App() {
     if (window.confirm("¿Seguro que quieres resetear la aplicación por completo? Se perderán todas tus clases grabadas y los recibos.")) {
       setPractices([]);
       setPayments([]);
+      handleCancelEdit();
     }
   };
 
-  // --- CONFIGURACIÓN DEL CALENDARIO DINÁMICO ---
+  // --- CALENDARIO ---
   const changeMonth = (offset) => {
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1));
   };
@@ -127,27 +166,32 @@ export default function App() {
   const firstDay = new Date(currentYear, currentMonth, 1).getDay();
   const startOffset = firstDay === 0 ? 6 : firstDay - 1;
   const calendarDays = Array.from({ length: startOffset }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1));
-
-  // Cadena de texto para comprobar el día de hoy exacto en el bucle
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  // --- ESTILOS VISUALES (Clean App look optimizado para Safari en iPhone) ---
+  // Encontrar qué número de práctica corresponde a la que se está editando
+  const editingPracticeNumber = practicesWithStatus.find(p => p.id === editingId)?.displayNumber;
+
+  // --- ESTILOS ---
   const styles = {
-    container: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: '400px', margin: '0 auto', padding: '15px', backgroundColor: '#f2f2f7', minHeight: '100vh', boxSizing: 'border-box' },
+    container: { fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', maxWidth: '400px', margin: '0 auto', padding: '15px', backgroundColor: '#f2f2f7', minHeight: '100vh', boxSizing: 'border-box' },
     card: { backgroundColor: 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
+    formCard: { backgroundColor: editingId ? '#fff9f2' : 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: editingId ? '1px solid #ff9500' : 'none' },
     calHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
     navBtn: { background: '#e5e5ea', border: 'none', borderRadius: '50%', width: '32px', height: '32px', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center', marginTop: '10px' },
     dayName: { fontWeight: 'bold', color: '#888', fontSize: '0.75rem', paddingBottom: '4px' },
-    day: { padding: '9px 0', borderRadius: '8px', backgroundColor: '#f9f9f9', fontSize: '0.9rem', fontWeight: '500', border: '2px solid transparent', transition: 'all 0.2s' },
+    day: { padding: '9px 0', borderRadius: '8px', backgroundColor: '#f9f9f9', fontSize: '0.9rem', fontWeight: '500', border: '2px solid transparent' },
     highlightDay: { backgroundColor: '#ff3b30', color: 'white', fontWeight: 'bold' },
     todayDay: { borderColor: '#007aff', color: '#007aff', fontWeight: 'bold' },
     emptyDay: { backgroundColor: 'transparent' },
     label: { display: 'block', marginBottom: '5px', color: '#444', fontSize: '0.85rem', fontWeight: '600' },
     input: { width: '100%', padding: '11px', marginBottom: '12px', borderRadius: '8px', border: '1px solid #ccc', boxSizing: 'border-box', fontSize: '1rem', backgroundColor: '#fff' },
-    button: { width: '100%', padding: '12px', backgroundColor: '#007aff', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' },
+    button: { width: '100%', padding: '12px', backgroundColor: editingId ? '#ff9500' : '#007aff', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' },
+    cancelButton: { width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#555', border: 'none', borderRadius: '8px', fontSize: '0.9rem', cursor: 'pointer', marginTop: '5px' },
     payButton: { width: '100%', padding: '12px', backgroundColor: '#34c759', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', fontSize: '0.95rem' },
     listItem: { padding: '12px 0', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    listActions: { display: 'flex', flexDirection: 'column', gap: '8px', marginLeft: '10px' },
+    smallActionBtn: { padding: '6px 10px', borderRadius: '6px', border: '1px solid #ddd', backgroundColor: '#fff', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' },
     receiptItem: { padding: '12px 0', borderBottom: '1px solid #eee', fontSize: '0.9rem' },
     badgeIncluded: { backgroundColor: '#e8f5e9', color: '#2e7d32', padding: '3px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' },
     badgePaid: { backgroundColor: '#e3f2fd', color: '#1565c0', padding: '3px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 'bold' },
@@ -158,7 +202,7 @@ export default function App() {
   return (
     <div style={styles.container}>
       
-      {/* 1. SECCIÓN CALENDARIO COMPLETO CON NAVEGACIÓN */}
+      {/* 1. SECCIÓN CALENDARIO */}
       <div style={styles.card}>
         <div style={styles.calHeader}>
           <button style={styles.navBtn} onClick={() => changeMonth(-1)}>‹</button>
@@ -171,26 +215,20 @@ export default function App() {
           {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => <div key={d} style={styles.dayName}>{d}</div>)}
           {calendarDays.map((day, index) => {
             if (!day) return <div key={index} style={styles.emptyDay}></div>;
-            
             const dateString = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const isToday = todayStr === dateString;
             const hasPractice = practices.some(p => p.date === dateString);
 
-            // Combinar estilos si el día es hoy o si tiene práctica registrada
             let currentDayStyle = { ...styles.day };
             if (hasPractice) currentDayStyle = { ...currentDayStyle, ...styles.highlightDay };
             if (isToday) currentDayStyle = { ...currentDayStyle, ...styles.todayDay };
 
-            return (
-              <div key={index} style={currentDayStyle}>
-                {day}
-              </div>
-            );
+            return <div key={index} style={currentDayStyle}>{day}</div>;
           })}
         </div>
       </div>
 
-      {/* 2. PANEL DE CONTROL DE PAGOS (SIEMPRE VISIBLE) */}
+      {/* 2. PANEL DE CONTROL DE PAGOS */}
       <div style={{...styles.card, border: payablePractices.length >= 5 ? '2px solid #ff3b30' : 'none'}}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>💰 Control de Cuentas</h2>
         {gratisRestantes > 0 ? (
@@ -223,9 +261,11 @@ export default function App() {
         )}
       </div>
 
-      {/* 3. SECCIÓN FORMULARIO (CON TITULARES PARA MÓVIL) */}
-      <div style={styles.card}>
-        <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>Añadir Práctica Nº {practices.length + 1}</h2>
+      {/* 3. SECCIÓN FORMULARIO (DINÁMICO SEGÚN MODO AÑADIR/EDITAR) */}
+      <div style={styles.formCard}>
+        <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: editingId ? '#ff9500' : '#1c1c1e' }}>
+          {editingId ? `✏️ Modificando Práctica Nº ${editingPracticeNumber}` : `Añadir Práctica Nº ${practices.length + 1}`}
+        </h2>
         <div>
           <label style={styles.label}>Fecha de la clase:</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.input} />
@@ -234,24 +274,29 @@ export default function App() {
           <label style={styles.label}>Hora acordada:</label>
           <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={styles.input} />
         </div>
-        {!isIncluded && (
+        {(!isIncluded && !editingId) && (
           <div>
             <label style={styles.label}>Precio de la clase (€):</label>
             <input type="number" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} style={styles.input} />
           </div>
         )}
-        <button onClick={handleAddPractice} style={styles.button}>Guardar Práctica</button>
+        <button onClick={handleAddPractice} style={styles.button}>
+          {editingId ? 'Actualizar Práctica' : 'Guardar Práctica'}
+        </button>
+        {editingId && (
+          <button onClick={handleCancelEdit} style={styles.cancelButton}>Cancelar edición</button>
+        )}
       </div>
 
-      {/* 4. HISTORIAL DE CLASES GRABADAS */}
+      {/* 4. HISTORIAL DE CLASES GRABADAS (CON ACCIONES INTERACTIVAS) */}
       <div style={styles.card}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>Historial de Clases ({practicesWithStatus.length})</h2>
         {practicesWithStatus.length === 0 ? (
           <p style={{ color: '#888', fontSize: '0.85rem' }}>No hay ninguna práctica en el historial.</p>
         ) : (
           [...practicesWithStatus].reverse().map((p) => (
-            <div key={p.id} style={styles.listItem}>
-              <div>
+            <div key={p.id} style={{...styles.listItem, opacity: editingId === p.id ? 0.4 : 1}}>
+              <div style={{ flex: 1 }}>
                 <strong>Práctica {p.displayNumber}</strong>
                 <span style={{ fontSize: '1rem', marginLeft: '8px' }}>{p.isCompleted ? '🚗 Realizada' : '⏳ Programada'}</span>
                 <br/>
@@ -267,6 +312,16 @@ export default function App() {
                     </span>
                   )}
                 </div>
+              </div>
+              
+              {/* BOTONES DE EDICIÓN Y ELIMINACIÓN INDIVIDUAL */}
+              <div style={styles.listActions}>
+                <button style={styles.smallActionBtn} onClick={() => handleEditClick(p)}>
+                  ✏️ Editar
+                </button>
+                <button style={{...styles.smallActionBtn, color: '#ff3b30', borderColor: '#ffebee'}} onClick={() => handleDeletePractice(p.id, p.displayNumber)}>
+                  🗑️ Borrar
+                </button>
               </div>
             </div>
           ))
