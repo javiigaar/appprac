@@ -15,7 +15,7 @@ export default function App() {
   // Estado para controlar qué clase se está editando
   const [editingId, setEditingId] = useState(null);
 
-  // 1. CARGAR DATOS (Persistencia)
+  // 1. CARGAR DATOS (Persistencia de memoria)
   useEffect(() => {
     const savedPractices = JSON.parse(localStorage.getItem('mis_practicas_react')) || [];
     const savedPayments = JSON.parse(localStorage.getItem('mis_pagos_react')) || [];
@@ -30,6 +30,15 @@ export default function App() {
   }, [practices, payments]);
 
   const now = new Date();
+
+  // Función auxiliar para obtener el nombre del día de la semana (Lunes, Martes, etc.)
+  const getDayOfWeekName = (dateStr) => {
+    if (!dateStr) return '';
+    const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    return days[d.getDay()];
+  };
 
   // Ordenar cronológicamente para asignar los números reales en la lista
   const sortedPractices = [...practices].sort((a, b) => {
@@ -47,7 +56,7 @@ export default function App() {
     };
   });
 
-  // NUEVO: Identificar cuál es la próxima práctica programada
+  // Identificar cuál es la próxima práctica programada en el futuro
   const nextPractice = practicesWithStatus.find(p => !p.isCompleted);
 
   const isIncluded = practices.length < 5;
@@ -120,7 +129,7 @@ export default function App() {
     }
   };
 
-  // --- CÁLCULO DE CUENTAS ---
+  // --- CÁLCULO DE CUENTAS (Solo clases hechas que falten por pagar) ---
   const payablePractices = practicesWithStatus.filter(p => !p.isPaid && p.isCompleted);
   const totalDebt = payablePractices.reduce((sum, p) => sum + p.cost, 0);
   const gratisRestantes = 5 - practices.length < 0 ? 0 : 5 - practices.length;
@@ -171,7 +180,7 @@ export default function App() {
 
   const editingPracticeNumber = practicesWithStatus.find(p => p.id === editingId)?.displayNumber;
 
-  // --- ESTILOS ---
+  // --- ESTILOS VISUALES ---
   const styles = {
     container: { fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', maxWidth: '400px', margin: '0 auto', padding: '15px', backgroundColor: '#f2f2f7', minHeight: '100vh', boxSizing: 'border-box' },
     card: { backgroundColor: 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
@@ -203,7 +212,7 @@ export default function App() {
   return (
     <div style={styles.container}>
 
-      {/* 0. PANEL DE PRÓXIMA CLASE (Destacado arriba del todo) */}
+      {/* 0. PANEL DE PRÓXIMA CLASE (CON DÍA DE LA SEMANA) */}
       <div style={styles.nextClassCard}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1565c0' }}>🚀 Tu Próxima Clase</h2>
         {nextPractice ? (
@@ -212,7 +221,7 @@ export default function App() {
               Práctica {nextPractice.displayNumber}
             </div>
             <div style={{ color: '#005bb5', marginTop: '6px', fontSize: '1rem', fontWeight: '500' }}>
-              📅 {nextPractice.date.split('-').reverse().join('/')} a las ⏰ {nextPractice.time} hs
+              📅 {getDayOfWeekName(nextPractice.date)} {nextPractice.date.split('-').reverse().join('/')} a las ⏰ {nextPractice.time} hs
             </div>
           </div>
         ) : (
@@ -248,8 +257,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* 2. PANEL DE CONTROL DE PAGOS */}
-      <div style={{...styles.card, border: payablePractices.length >= 5 ? '2px solid #ff3b30' : 'none'}}>
+      {/* 2. PANEL DE CONTROL DE PAGOS (AHORA LIBRE DE LÍMITES) */}
+      <div style={styles.card}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>💰 Control de Cuentas</h2>
         {gratisRestantes > 0 ? (
           <div style={{ padding: '10px', backgroundColor: '#e8f5e9', borderRadius: '8px', color: '#2e7d32', fontSize: '0.9rem', textAlign: 'center', fontWeight: '500' }}>
@@ -259,29 +268,29 @@ export default function App() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.95rem' }}>
               <span>Clases hechas sin pagar:</span>
-              <strong style={{ color: payablePractices.length >= 5 ? '#ff3b30' : '#333' }}>
-                {payablePractices.length} / 5 acumuladas
+              <strong>
+                {payablePractices.length} prácticas acumuladas
               </strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem' }}>
               <span>Importe adeudado actual:</span>
-              <strong style={{ color: payablePractices.length >= 5 ? '#ff3b30' : '#34c759', fontSize: '1.05rem' }}>
+              <strong style={{ color: '#34c759', fontSize: '1.05rem' }}>
                 {totalDebt.toFixed(2).replace('.', ',')} €
               </strong>
             </div>
             {payablePractices.length > 0 && (
               <button 
                 onClick={handlePayBatch} 
-                style={{...styles.payButton, backgroundColor: payablePractices.length >= 5 ? '#ff3b30' : '#34c759'}}
+                style={styles.payButton}
               >
-                {payablePractices.length >= 5 ? '⚠️ ¡Límite alcanzado! Registrar Pago ya' : 'Pagar clases hechas de golpe'}
+                Pagar clases hechas de golpe
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* 3. SECCIÓN FORMULARIO (DINÁMICO SEGÚN MODO AÑADIR/EDITAR) */}
+      {/* 3. SECCIÓN FORMULARIO */}
       <div style={styles.formCard}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: editingId ? '#ff9500' : '#1c1c1e' }}>
           {editingId ? `✏️ Modificando Práctica Nº ${editingPracticeNumber}` : `Añadir Práctica Nº ${practices.length + 1}`}
@@ -308,7 +317,7 @@ export default function App() {
         )}
       </div>
 
-      {/* 4. HISTORIAL DE CLASES GRABADAS (CON ACCIONES INTERACTIVAS) */}
+      {/* 4. HISTORIAL DE CLASES GRABADAS (CON EL NOMBRE DEL DÍA DE LA SEMANA) */}
       <div style={styles.card}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>Historial de Clases ({practicesWithStatus.length})</h2>
         {practicesWithStatus.length === 0 ? (
@@ -321,7 +330,7 @@ export default function App() {
                 <span style={{ fontSize: '1rem', marginLeft: '8px' }}>{p.isCompleted ? '🚗 Realizada' : '⏳ Programada'}</span>
                 <br/>
                 <span style={{ color: '#666', fontSize: '0.8rem' }}>
-                  {p.date.split('-').reverse().join('/')} - {p.time} hs
+                  {getDayOfWeekName(p.date)} {p.date.split('-').reverse().join('/')} - {p.time} hs
                 </span>
                 <div style={{ marginTop: '5px' }}>
                   {p.isIncluded ? (
@@ -334,7 +343,7 @@ export default function App() {
                 </div>
               </div>
               
-              {/* BOTONES DE EDICIÓN Y ELIMINACIÓN INDIVIDUAL */}
+              {/* ACCIONES */}
               <div style={styles.listActions}>
                 <button style={styles.smallActionBtn} onClick={() => handleEditClick(p)}>
                   ✏️ Editar
