@@ -12,7 +12,7 @@ export default function App() {
   const [time, setTime] = useState('');
   const [cost, setCost] = useState('32.37');
 
-  // NUEVO: Estado para controlar qué clase se está editando
+  // Estado para controlar qué clase se está editando
   const [editingId, setEditingId] = useState(null);
 
   // 1. CARGAR DATOS (Persistencia)
@@ -47,6 +47,9 @@ export default function App() {
     };
   });
 
+  // NUEVO: Identificar cuál es la próxima práctica programada
+  const nextPractice = practicesWithStatus.find(p => !p.isCompleted);
+
   const isIncluded = practices.length < 5;
 
   // Guardar nueva práctica o actualizar la existente
@@ -57,7 +60,7 @@ export default function App() {
     }
     
     if (editingId) {
-      // MODO EDICIÓN: Actualizar los datos de la práctica existente
+      // MODO EDICIÓN
       const updated = practices.map(p => {
         if (p.id === editingId) {
           return {
@@ -72,7 +75,7 @@ export default function App() {
       setPractices(updated);
       setEditingId(null);
     } else {
-      // MODO NUEVA: Añadir una práctica normal a la lista
+      // MODO NUEVA
       const newPractice = {
         id: Date.now().toString(),
         date,
@@ -90,17 +93,16 @@ export default function App() {
     setCost('32.37');
   };
 
-  // NUEVO: Activar modo edición cargando los datos en el formulario
+  // Activar modo edición
   const handleEditClick = (p) => {
     setEditingId(p.id);
     setDate(p.date);
     setTime(p.time);
     setCost(p.isIncluded ? '32.37' : p.cost.toString());
-    // Mover el scroll hacia arriba automáticamente para que el usuario vea el formulario listo
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // NUEVO: Cancelar el modo edición y limpiar
+  // Cancelar el modo edición
   const handleCancelEdit = () => {
     setEditingId(null);
     setDate('');
@@ -108,11 +110,10 @@ export default function App() {
     setCost('32.37');
   };
 
-  // NUEVO: Eliminar una práctica específica de la lista
+  // Eliminar una práctica específica
   const handleDeletePractice = (id, number) => {
     if (window.confirm(`¿Seguro que quieres eliminar definitivamente la Práctica Nº ${number}?`)) {
       setPractices(practices.filter(p => p.id !== id));
-      // Si justo estábamos editando la práctica eliminada, cancelamos la edición
       if (editingId === id) {
         handleCancelEdit();
       }
@@ -168,13 +169,13 @@ export default function App() {
   const calendarDays = Array.from({ length: startOffset }).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1));
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-  // Encontrar qué número de práctica corresponde a la que se está editando
   const editingPracticeNumber = practicesWithStatus.find(p => p.id === editingId)?.displayNumber;
 
   // --- ESTILOS ---
   const styles = {
     container: { fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', maxWidth: '400px', margin: '0 auto', padding: '15px', backgroundColor: '#f2f2f7', minHeight: '100vh', boxSizing: 'border-box' },
     card: { backgroundColor: 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
+    nextClassCard: { backgroundColor: '#e3f2fd', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #bbdefb' },
     formCard: { backgroundColor: editingId ? '#fff9f2' : 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: editingId ? '1px solid #ff9500' : 'none' },
     calHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
     navBtn: { background: '#e5e5ea', border: 'none', borderRadius: '50%', width: '32px', height: '32px', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -201,6 +202,25 @@ export default function App() {
 
   return (
     <div style={styles.container}>
+
+      {/* 0. PANEL DE PRÓXIMA CLASE (Destacado arriba del todo) */}
+      <div style={styles.nextClassCard}>
+        <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1565c0' }}>🚀 Tu Próxima Clase</h2>
+        {nextPractice ? (
+          <div>
+            <div style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#1c1c1e' }}>
+              Práctica {nextPractice.displayNumber}
+            </div>
+            <div style={{ color: '#005bb5', marginTop: '6px', fontSize: '1rem', fontWeight: '500' }}>
+              📅 {nextPractice.date.split('-').reverse().join('/')} a las ⏰ {nextPractice.time} hs
+            </div>
+          </div>
+        ) : (
+          <p style={{ margin: 0, color: '#555', fontSize: '0.9rem' }}>
+            No tienes ninguna práctica futura programada en tu agenda.
+          </p>
+        )}
+      </div>
       
       {/* 1. SECCIÓN CALENDARIO */}
       <div style={styles.card}>
