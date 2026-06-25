@@ -15,7 +15,7 @@ export default function App() {
   // Estado para controlar qué clase se está editando
   const [editingId, setEditingId] = useState(null);
 
-  // 1. CARGAR DATOS (Persistencia de memoria)
+  // 1. CARGAR DATOS (Persistencia)
   useEffect(() => {
     const savedPractices = JSON.parse(localStorage.getItem('mis_practicas_react')) || [];
     const savedPayments = JSON.parse(localStorage.getItem('mis_pagos_react')) || [];
@@ -129,7 +129,7 @@ export default function App() {
     }
   };
 
-  // --- CÁLCULO DE CUENTAS (Solo clases hechas que falten por pagar) ---
+  // --- CÁLCULO DE CUENTAS (Dinámico y libre de límites rígidos) ---
   const payablePractices = practicesWithStatus.filter(p => !p.isPaid && p.isCompleted);
   const totalDebt = payablePractices.reduce((sum, p) => sum + p.cost, 0);
   const gratisRestantes = 5 - practices.length < 0 ? 0 : 5 - practices.length;
@@ -180,12 +180,49 @@ export default function App() {
 
   const editingPracticeNumber = practicesWithStatus.find(p => p.id === editingId)?.displayNumber;
 
-  // --- ESTILOS VISUALES ---
+  // --- CLONACIÓN Y MIGRACIÓN DE DATOS (NUEVO) ---
+  const handleExportData = () => {
+    const dataStr = JSON.stringify({ practices, payments });
+    if (practices.length === 0 && payments.length === 0) {
+      alert("No tienes datos guardados en esta app para exportar.");
+      return;
+    }
+    navigator.clipboard.writeText(dataStr)
+      .then(() => {
+        alert("✅ ¡Datos copiados! Cierra esta app vieja, abre la app NUEVA, ve abajo del todo y pulsa el botón azul de 'Pegar Datos'.");
+      })
+      .catch(() => {
+        alert("No se pudo copiar automáticamente. Por favor, copia de forma manual el texto de la siguiente ventana:");
+        window.prompt("Copia este código entero:", dataStr);
+      });
+  };
+
+  const handleImportData = () => {
+    const code = window.prompt("Pega aquí el código que has copiado de la aplicación vieja:");
+    if (!code) return;
+    try {
+      const parsed = JSON.parse(code);
+      if (parsed.practices || parsed.payments) {
+        if (window.confirm("⚠️ ¿Quieres importar estos datos? Se sobrescribirá lo que tengas en esta app por tus clases antiguas.")) {
+          setPractices(parsed.practices || []);
+          setPayments(parsed.payments || []);
+          alert("🎉 ¡Éxito! Tus datos se han mudado correctamente. Ya puedes eliminar de tu pantalla el acceso directo viejo.");
+        }
+      } else {
+        alert("❌ Código no válido.");
+      }
+    } catch (e) {
+      alert("❌ Error al procesar el código. Asegúrate de copiarlo completo de la otra app.");
+    }
+  };
+
+  // --- ESTILOS ---
   const styles = {
     container: { fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', maxWidth: '400px', margin: '0 auto', padding: '15px', backgroundColor: '#f2f2f7', minHeight: '100vh', boxSizing: 'border-box' },
     card: { backgroundColor: 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' },
     nextClassCard: { backgroundColor: '#e3f2fd', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #bbdefb' },
     formCard: { backgroundColor: editingId ? '#fff9f2' : 'white', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: editingId ? '1px solid #ff9500' : 'none' },
+    migrationCard: { backgroundColor: '#fffde7', padding: '18px', borderRadius: '12px', marginBottom: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #fff59d' },
     calHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
     navBtn: { background: '#e5e5ea', border: 'none', borderRadius: '50%', width: '32px', height: '32px', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center', marginTop: '10px' },
@@ -199,6 +236,7 @@ export default function App() {
     button: { width: '100%', padding: '12px', backgroundColor: editingId ? '#ff9500' : '#007aff', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' },
     cancelButton: { width: '100%', padding: '10px', backgroundColor: 'transparent', color: '#555', border: 'none', borderRadius: '8px', fontSize: '0.9rem', cursor: 'pointer', marginTop: '5px' },
     payButton: { width: '100%', padding: '12px', backgroundColor: '#34c759', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', fontSize: '0.95rem' },
+    migrationBtn: { width: '100%', padding: '11px', backgroundColor: '#ffa726', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '8px', fontSize: '0.9rem' },
     listItem: { padding: '12px 0', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     listActions: { display: 'flex', flexDirection: 'column', gap: '8px', marginLeft: '10px' },
     smallActionBtn: { padding: '6px 10px', borderRadius: '6px', border: '1px solid #ddd', backgroundColor: '#fff', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' },
@@ -212,7 +250,7 @@ export default function App() {
   return (
     <div style={styles.container}>
 
-      {/* 0. PANEL DE PRÓXIMA CLASE (CON DÍA DE LA SEMANA) */}
+      {/* 0. PANEL DE PRÓXIMA CLASE */}
       <div style={styles.nextClassCard}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1565c0' }}>🚀 Tu Próxima Clase</h2>
         {nextPractice ? (
@@ -257,7 +295,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* 2. PANEL DE CONTROL DE PAGOS (AHORA LIBRE DE LÍMITES) */}
+      {/* 2. PANEL DE CONTROL DE PAGOS */}
       <div style={styles.card}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>💰 Control de Cuentas</h2>
         {gratisRestantes > 0 ? (
@@ -317,7 +355,21 @@ export default function App() {
         )}
       </div>
 
-      {/* 4. HISTORIAL DE CLASES GRABADAS (CON EL NOMBRE DEL DÍA DE LA SEMANA) */}
+      {/* 6. PANEL DE MIGRACIÓN DE DATOS */}
+      <div style={styles.migrationCard}>
+        <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#e65100' }}>📦 Clonar / Mudar datos entre Apps</h2>
+        <p style={{ margin: '0 0 10px 0', fontSize: '0.8rem', color: '#555', lineHeight: '1.3' }}>
+          El iPhone aísla la memoria de cada acceso directo. Para pasar tus clases guardadas a la nueva app con el logo nuevo de golpe:
+        </p>
+        <button onClick={handleExportData} style={styles.migrationBtn}>
+          1. 📤 Copiar datos (Dale desde la APP VIEJA)
+        </button>
+        <button onClick={handleImportData} style={{...styles.migrationBtn, backgroundColor: '#29b6f6'}}>
+          2. 📥 Pegar datos (Dale desde la APP NUEVA)
+        </button>
+      </div>
+
+      {/* 4. HISTORIAL DE CLASES GRABADAS */}
       <div style={styles.card}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem', color: '#1c1c1e' }}>Historial de Clases ({practicesWithStatus.length})</h2>
         {practicesWithStatus.length === 0 ? (
@@ -343,7 +395,6 @@ export default function App() {
                 </div>
               </div>
               
-              {/* ACCIONES */}
               <div style={styles.listActions}>
                 <button style={styles.smallActionBtn} onClick={() => handleEditClick(p)}>
                   ✏️ Editar
